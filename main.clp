@@ -2,6 +2,8 @@
 ; Classes & Instances
 ; =========================================
 
+; The class chemical is going to contain all the values that we are going to check the measurements
+; + possible danger of the chemical to print them in the screen
 (defclass Chemical
     (is-a USER)
     (role concrete)
@@ -40,12 +42,12 @@
     (multislot possible_danger
         (type SYMBOL)
         (cardinality 0 ?VARIABLE)
-        (create-accessor read-write))
-    (single-slot matching-measures
-        (type INTEGER)
-        (range 0 ?VARIABLE)
-        (default 0)))
-        
+        (create-accessor read-write)))
+
+; We are going to use this template to check what measurements a chemical matches
+; After we create every chemical instance we are going to create also a cmc template for every chemical
+; So the name of the cmc will be the name of the chemical and checked will be an empty list by default
+; If we match for example in chemical A the pH, its cmc will be updated and the checked list now will be (checked pH)
 (deftemplate cmc "chemical measurements counter"
     (slot name 
         (type SYMBOL))
@@ -54,6 +56,7 @@
         (allowed-symbols pH solubility spectroscopy color specific_gravity radioactivity)
         (cardinality 0 ?VARIABLE)))
 
+; This class will used for every sewer system part (Control System, Manhole, Storage)
 (defclass SewerSystemPart
     (is-a USER)
     (role concrete)
@@ -67,7 +70,8 @@
         (allowed-classes Chemical)
         (cardinality 0 ?VARIABLE)
         (create-accessor read-write)))
-        
+
+; We initialize the chemicals
 (definstances db
     ; ============================
     ; Chemicals Instances
@@ -172,7 +176,8 @@
     (control-system of SewerSystemPart
         (connected_with [manhole-12] [manhole-13])))
         
-        
+
+; We initialize the chemical measurement counters of every chemical
 (deffacts initial-facts "initialize templates needed to prevent infinite rule firing"
     (cmc (name hydrochloric-acid))
     (cmc (name sulphuric-acid))
@@ -188,7 +193,13 @@
 ; =========================================
 ; Functions
 ; =========================================
-    
+
+; this function takes 2 parameters
+; the first is ?multiple-values which will be yes or no
+; and the second is $?allowed-answers which is a list of allowed answers for the question
+; if ?multiple-values is yes then use readline instead of read to read multiple values
+; and then loop every one of those values using foreach because we may want to skip the first 2 options for example
+; the ?continue-looping will be set to true only if atleast one of the values in the measurements is incorrect
 (deffunction get-question-answer (?multiple-values $?allowed-answers)
     (if (eq ?multiple-values yes)
         then
@@ -213,11 +224,13 @@
     )
     (return ?answer))
 
+; We are going to use this function every time we want to ask the user a question
 (deffunction ask-question (?question ?multiple-values $?allowed-answers)
     (printout t ?question ?allowed-answers " ")
     (bind ?answer (get-question-answer ?multiple-values ?allowed-answers))
     (return ?answer))
-     
+
+; We are going to use this function every time we want to ask the user a question which contains a range of numbers
 (deffunction ask-number (?question ?min ?max)
     (printout t ?question " (range " ?min "-" ?max ") ")
     (bind ?answer (read))
@@ -231,6 +244,11 @@
 ; Rules
 ; =========================================
 
+; Ask the questions needed to find where the contamination contamination came from
+; First we are going to ask the measurements that we are going to check
+; and then for every measurement we add in the answer we are going to ask a question
+; and finally we are going to assert the fact check-last-sewer-parts to check the control system
+; because we will start the searching from the end of the sewer system to the start where the storages are
 (defrule init
     (initial-fact)
     =>
@@ -261,7 +279,11 @@
             (bind ?radioactive-value (ask-question "What is chemical's color? " no yes no))
             (assert (is_radioactive ?radioactive-value)))
     (assert (check-last-sewer-parts)))
-            
+
+; Check which manholes are connecetd with the control system and create a fact sewer-part with its name right next to it
+; For example if its connected to manhole 13 and 11 we are going to create to facts
+; sewer-part manhole-13
+; sewer-part manhoole-11
 (defrule last-sewer-parts "check last sewer parts that are connected to control system"
     ?f1 <- (check-last-sewer-parts)
     (object (is-a SewerSystemPart) (name [control-system]) (connected_with $?conn))
@@ -271,6 +293,11 @@
          (assert (sewer-part ?sewer-part-name)))
      (retract ?f1))
          
+; This rule is going to be fired every time we create a new sewer-part fact
+; if the object that we are checking have 0 connected_with instances that means we have reach a storage
+; else ask if the sewer-part have been contaminated and if the answer is yes
+; then create another fact has-contamination ?sewer-part-name and only for those facts again
+; we will check again their connected_with instances
 (defrule sewer-parts "check contaminations in sewer parts"
     ?f1 <- (sewer-part ?sewer-part-name)
     (object (is-a SewerSystemPart) (name =(symbol-to-instance-name ?sewer-part-name)) (connected_with $?conn) (chemicals $?chems))
@@ -286,7 +313,8 @@
             )
      )
     (retract ?f1))
-     
+
+; Again when this rule fires we want to create for every connecetd_with instance a sewer-part fact
 (defrule contaminated-sewer-parts "check sewer parts that have been contaminated"
     ?f1 <- (has-contamination ?sewer-part-name)
     (object (is-a SewerSystemPart) (name =(symbol-to-instance-name ?sewer-part-name)) (connected_with $?conn))
@@ -296,6 +324,10 @@
          (assert (sewer-part ?name)))
     (retract ?f1))
 
+; If this rule fires that means that we have reached a storage from the sewer-parts rule
+; and now we need to find the possible chemicals that caused the contamination
+; so we are going to print the storage name and then for every chemical that its stored inside it
+; we are going to check if it matches the measurements
 (defrule storage "check storages from which the contamination started"
     ?f1 <- (storage ?storage-name)
     (object (is-a SewerSystemPart) (name =(symbol-to-instance-name ?storage-name)) (chemicals $?chems))
@@ -305,7 +337,11 @@
         (bind ?name (instance-name-to-symbol ?chemical))
         (assert (chemical ?name)))
     (retract ?f1))
-    
+
+; Check if the chemical pH is matching the pH of the measurements
+; and if it matches then update the cmc instance of the current chemical and add pH to its checked list
+; if its updated checked list size is equal to the measurements list size that means that we matched every description
+; for this chemical and that means it possibly caused the contamination
 (defrule chemical-ph "check if chemical's ph matches the measurement"
     ?f1 <- (chemical ?chemical-name)
     (measurements $?measurements)
@@ -320,7 +356,8 @@
         then (assert (caused-contamination ?chemical-name)))
     (retract ?f1)
     (assert (chemical ?chemical-name)))
-            
+
+; Same but for solubility here
 (defrule chemical-solubility "check if chemical's solubility matches the measurement"
     ?f1 <- (chemical ?chemical-name)
     (measurements $?measurements)
@@ -336,6 +373,8 @@
     (retract ?f1)
     (assert (chemical ?chemical-name)))
         
+; Print all chemicals that possibly caused the contamination
+; along with their possible dangers
 (defrule print-chemicals "print chemicals which are the cause of contamination"
     ?f1 <- (caused-contamination ?chemical-name)
     (object (is-a Chemical) (name =(symbol-to-instance-name ?chemical-name)) (possible_danger $?danger))
