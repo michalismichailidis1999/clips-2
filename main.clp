@@ -1,6 +1,6 @@
-; Μιχαήλ Μιχαηλίδης 3273
-; Αλέξανδρος Μουρατίδης 3285
-; Ευθυμία Σαρρή 3124
+; �?ιχαήλ �?ιχαηλίδης 3273
+; Αλέξανδ�?ος �?ου�?ατίδης 3285
+; Ευθυμία Σα�?�?ή 3124
 
 ; =========================================
 ; Classes & Instances
@@ -376,6 +376,70 @@
         then (assert (caused-contamination ?chemical-name)))
     (retract ?f1)
     (assert (chemical ?chemical-name)))
+    
+; Same but for spectroscopy here
+(defrule chemical-spectroscopy "check if chemical's spectroscopy matches the measurement"
+    ?f1 <- (chemical ?chemical-name)
+    (measurements $?measurements)
+    (spectroscopy ?sp)
+    (object (is-a Chemical) (name =(symbol-to-instance-name ?chemical-name)) (spectroscopy ?sp))
+    ?obj <- (cmc (name ?chemical-name) (checked $?checked))
+    (test (eq (member$ spectroscopy $?checked) FALSE))
+    =>
+    (bind ?new-checked-arr (create$ ?checked spectroscopy))
+    (modify ?obj (checked ?new-checked-arr))
+    (if (eq (length$ ?new-checked-arr) (length$ ?measurements))
+        then (assert (caused-contamination ?chemical-name)))
+    (retract ?f1)
+    (assert (chemical ?chemical-name)))
+    
+; Same but for color here
+(defrule chemical-color "check if chemical's color matches the measurement"
+    ?f1 <- (chemical ?chemical-name)
+    (measurements $?measurements)
+    (color ?c)
+    (object (is-a Chemical) (name =(symbol-to-instance-name ?chemical-name)) (color ?c))
+    ?obj <- (cmc (name ?chemical-name) (checked $?checked))
+    (test (eq (member$ color $?checked) FALSE))
+    =>
+    (bind ?new-checked-arr (create$ ?checked color))
+    (modify ?obj (checked ?new-checked-arr))
+    (if (eq (length$ ?new-checked-arr) (length$ ?measurements))
+        then (assert (caused-contamination ?chemical-name)))
+    (retract ?f1)
+    (assert (chemical ?chemical-name)))
+    
+; Same but for specific gravity here
+(defrule chemical-specific-gravity "check if chemical's specific gravity matches the measurement"
+    ?f1 <- (chemical ?chemical-name)
+    (measurements $?measurements)
+    (specific_gravity ?sg)
+    (object (is-a Chemical) (name =(symbol-to-instance-name ?chemical-name)) (specific_gravity ?sg))
+    ?obj <- (cmc (name ?chemical-name) (checked $?checked))
+    (test (eq (member$ specific_gravity $?checked) FALSE))
+    =>
+    (bind ?new-checked-arr (create$ ?checked specific_gravity))
+    (modify ?obj (checked ?new-checked-arr))
+    (if (eq (length$ ?new-checked-arr) (length$ ?measurements))
+        then (assert (caused-contamination ?chemical-name)))
+    (retract ?f1)
+    (assert (chemical ?chemical-name)))
+    
+; Same but for radioactivity here
+(defrule chemical-color "check if chemical's color matches the measurement"
+    ?f1 <- (chemical ?chemical-name)
+    (measurements $?measurements)
+    (is_radioactive ?r)
+    (object (is-a Chemical) (name =(symbol-to-instance-name ?chemical-name)) (is_radioactive ?r))
+    ?obj <- (cmc (name ?chemical-name) (checked $?checked))
+    (test (eq (member$ is_radioactive $?checked) FALSE))
+    =>
+    (bind ?new-checked-arr (create$ ?checked is_radioactive))
+    (modify ?obj (checked ?new-checked-arr))
+    (if (eq (length$ ?new-checked-arr) (length$ ?measurements))
+        then (assert (caused-contamination ?chemical-name)))
+    (retract ?f1)
+    (assert (chemical ?chemical-name)))
         
 ; Print all chemicals that possibly caused the contamination
 ; along with their possible dangers
@@ -387,6 +451,3 @@
     (if (neq (length$ ?danger) 0)
         then (printout t "Possible dangers: " ?danger crlf))
     (retract ?f1))
-
-
-
