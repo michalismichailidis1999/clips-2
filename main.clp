@@ -211,13 +211,19 @@
             (bind ?continue-looping yes)
             (while (eq ?continue-looping yes) do
                 (bind ?continue-looping no)
-                (foreach ?measure ?answer
-                    (if (not (member$ ?measure $?allowed-answers))
-                        then
-                            (bind ?continue-looping yes)
-                            (printout t "Incorrect answer. You must type one of these values: " ?allowed-answers " ")
-                            (bind ?answer (explode$ (readline)))
-                            (break))))
+                (if (eq (length$ ?answer) 0)
+                    then
+                        (bind ?continue-looping yes)
+                        (printout t "One measurement at least is required: " ?allowed-answers " ")
+                        (bind ?answer (explode$ (readline)))
+                else
+                    (foreach ?measure ?answer
+                        (if (not (member$ ?measure $?allowed-answers))
+                            then
+                                (bind ?continue-looping yes)
+                                (printout t "Incorrect answer. You must type one of these values: " ?allowed-answers " ")
+                                (bind ?answer (explode$ (readline)))
+                                (break)))))
         else
             (bind ?answer (read))
             (while (not (member$ ?answer $?allowed-answers)) do
@@ -276,11 +282,11 @@
             (assert (color ?color-value)))
     (if (member$ specific_gravity ?measurement-values)
         then
-            (bind ?gravity-value (ask-number "What is chemical's color? " 0.9 1.1))
+            (bind ?gravity-value (ask-number "What is chemical's specific gravity? " 0.9 1.1))
             (assert (specific_gravity ?gravity-value)))
     (if (member$ radioactivity ?measurement-values)
         then
-            (bind ?radioactive-value (ask-question "What is chemical's color? " no yes no))
+            (bind ?radioactive-value (ask-question "Is the chemical rarioactive? " no yes no))
             (assert (is_radioactive ?radioactive-value)))
     (assert (check-last-sewer-parts)))
 
@@ -332,14 +338,21 @@
 ; and now we need to find the possible chemicals that caused the contamination
 ; so we are going to print the storage name and then for every chemical that its stored inside it
 ; we are going to check if it matches the measurements
+; also we will check if we have already encounter the chemical in another storage
+; and we have already printed it in the console, because we want to print it as many times we encounter
+; this chemical in a storage if it possibly caused contamination
 (defrule storage "check storages from which the contamination started"
     ?f1 <- (storage ?storage-name)
     (object (is-a SewerSystemPart) (name =(symbol-to-instance-name ?storage-name)) (chemicals $?chems))
     =>
     (printout t "Source of contamination is " ?storage-name crlf)
     (foreach ?chemical ?chems
-        (bind ?name (instance-name-to-symbol ?chemical))
-        (assert (chemical ?name)))
+        (if (not (eq (member$ (sym-cat (str-cat "printed-chemical-" ?chemical)) (get-deftemplate-list)) FALSE))
+            then
+                (assert (caused-contamination ?chemical))
+            else
+                (bind ?name (instance-name-to-symbol ?chemical))
+                (assert (chemical ?name))))
     (retract ?f1))
 
 ; Check if the chemical pH is matching the pH of the measurements
@@ -426,7 +439,7 @@
     (assert (chemical ?chemical-name)))
     
 ; Same but for radioactivity here
-(defrule chemical-color "check if chemical's color matches the measurement"
+(defrule chemical-radioactivity "check if chemical's color matches the measurement"
     ?f1 <- (chemical ?chemical-name)
     (measurements $?measurements)
     (is_radioactive ?r)
@@ -443,6 +456,9 @@
         
 ; Print all chemicals that possibly caused the contamination
 ; along with their possible dangers
+; create a fact with name printed-chemical-(chemical name here)
+; because we might encounter the same chemical in another storage, so this will make sure
+; that the chemical will be printed every time is found in a storage
 (defrule print-chemicals "print chemicals which are the cause of contamination"
     ?f1 <- (caused-contamination ?chemical-name)
     (object (is-a Chemical) (name =(symbol-to-instance-name ?chemical-name)) (possible_danger $?danger))
@@ -450,4 +466,6 @@
     (printout t "The chemical that probably caused the contamination is " ?chemical-name crlf)
     (if (neq (length$ ?danger) 0)
         then (printout t "Possible dangers: " ?danger crlf))
+    (if (eq (member$ (sym-cat (str-cat "printed-chemical-" ?chemical-name)) (get-deftemplate-list)) FALSE)
+        then (str-assert (str-cat "(printed-chemical-" ?chemical-name ")")))
     (retract ?f1))
